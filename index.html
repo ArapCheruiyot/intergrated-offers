@@ -264,7 +264,8 @@
                     if (xhr.status === 200) {
                         uploadedFilesCount++;
                         if (uploadedFilesCount === selectedFiles.length) {
-                            alert('All files uploaded successfully.');
+                            alert('All files uploaded successfully!');
+                            document.getElementById('progress_bar').style.width = '0%';
                         }
                     }
                 };
@@ -273,24 +274,19 @@
             }
         }
 
-        // Search functionality
-       document.getElementById('searchButton').addEventListener('click', () => {
-    const searchInput = document.getElementById('searchInput').value.trim().toLowerCase();
-    const fileList = document.getElementById('file_list');
-    const files = Array.from(fileList.getElementsByTagName('li'));
+        document.getElementById('searchButton').addEventListener('click', function() {
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            if (!searchValue) {
+                alert('Please enter a customer number.');
+                return;
+            }
 
-    files.forEach(file => {
-        const fileName = file.textContent.toLowerCase();
-        
-        // Check if the search input is a number and match it with the file name
-        if (searchInput && fileName.includes(searchInput)) {
-            file.style.display = 'block';
-        } else {
-            file.style.display = 'none';
-        }
-    });
-});
-
+            selectedFiles.forEach(file => {
+                if (file.name.toLowerCase().includes(searchValue)) {
+                    alert('File found: ' + file.name);
+                }
+            });
+        });
     </script>
 </body>
 </html>
