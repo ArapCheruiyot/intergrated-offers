@@ -274,29 +274,30 @@
             }
         }
 
-         document.getElementById('searchButton').addEventListener('click', function() {
-        const searchValue = document.getElementById('searchInput').value.toLowerCase();
-        console.log("Search value: ", searchValue); // Debugging line
+         document.getElementById('searchButton').addEventListener('click', function () {
+    const searchValue = document.getElementById('searchInput').value.trim().toLowerCase();
+    console.log("Search value: ", searchValue); // Debugging line
 
-        if (!searchValue) {
-            alert('Please enter a customer number.');
-            return;
-        }
+    if (!searchValue) {
+        alert('Please enter a customer number.');
+        return;
+    }
 
-        let found = false; // Flag to check if file is found
+    let found = false;
 
-        selectedFiles.forEach(file => {
-            if (file.name.toLowerCase().includes(searchValue)) {
-                found = true; // Mark as found
-                alert('File found: ' + file.name);
-            }
-        });
-
-        // If no file is found, display an alert
-        if (!found) {
-            alert('No file found for the entered customer number.');
+    selectedFiles.forEach(file => {
+        const cleanFileName = file.name.toLowerCase().trim();
+        console.log("Comparing:", cleanFileName, "with", searchValue); // Debugging
+        if (cleanFileName.includes(searchValue)) {
+            found = true;
+            alert('File found: ' + file.name);
         }
     });
+
+    if (!found) {
+        alert('No file found for the entered customer number.');
+    }
+});
     </script>
 </body>
 </html>
