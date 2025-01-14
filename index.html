@@ -274,20 +274,23 @@
         }
 
         // Search functionality
-        document.getElementById('searchButton').addEventListener('click', () => {
-            const searchInput = document.getElementById('searchInput').value;
-            const fileList = document.getElementById('file_list');
-            const files = Array.from(fileList.getElementsByTagName('li'));
+       document.getElementById('searchButton').addEventListener('click', () => {
+    const searchInput = document.getElementById('searchInput').value.trim().toLowerCase();
+    const fileList = document.getElementById('file_list');
+    const files = Array.from(fileList.getElementsByTagName('li'));
 
-            files.forEach(file => {
-                const fileName = file.textContent.toLowerCase();
-                if (fileName.includes(searchInput.toLowerCase())) {
-                    file.style.display = 'block';
-                } else {
-                    file.style.display = 'none';
-                }
-            });
-        });
+    files.forEach(file => {
+        const fileName = file.textContent.toLowerCase();
+        
+        // Check if the search input is a number and match it with the file name
+        if (searchInput && fileName.includes(searchInput)) {
+            file.style.display = 'block';
+        } else {
+            file.style.display = 'none';
+        }
+    });
+});
+
     </script>
 </body>
 </html>
