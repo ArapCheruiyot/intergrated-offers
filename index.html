@@ -3,120 +3,286 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Drive File Parser</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
-    <script src="https://apis.google.com/js/api.js"></script>
+    <title>Google Drive File Uploader</title>
     <style>
-        /* Same styles as before */
+        /* Styles remain unchanged */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        main {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #4CAF50;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 10px 0;
+            font-size: 1em;
+            font-weight: bold;
+            color: white;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        #uploadSection {
+            display: none;
+            margin-top: 20px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            width: 100%;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f9f9f9;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .notice {
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 10px;
+        }
+        .file-list {
+            margin: 20px 0;
+            list-style-type: none;
+            padding: 0;
+        }
+        .file-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 5px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .delete-button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .delete-button:hover {
+            background: #c0392b;
+        }
+        footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #777;
+        }
+        /* Progress bar styles */
+        .progress-container {
+            width: 100%;
+            background-color: #f3f3f3;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 0;
+            height: 20px;
+            background-color: #4CAF50;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <h2>Google Drive File Parser</h2>
+    <header>
+        <h1>Google Drive File Uploader</h1>
+    </header>
+    <main>
+        <h1>Upload Files Easily</h1>
+        <button id="authorize_button" class="button" style="display: none;" onclick="handleAuthClick()">Authorize Access</button>
+        <button id="signout_button" class="button" style="display: none;" onclick="handleSignoutClick()">Sign Out</button>
 
-    <!-- Authentication Button -->
-    <button id="authorizeButton">Authorize Google Drive</button>
+        <div id="uploadSection">
+            <label for="file_input">Select Excel files to upload:</label>
+            <input type="file" id="file_input" multiple accept=".xlsx, .xls" onchange="handleFileSelection()">
+            <ul id="file_list" class="file-list"></ul>
+            <button class="button" onclick="uploadFiles()">Upload Files</button>
+            <p class="notice">Note: Only Excel files (.xlsx, .xls) are allowed. You can select multiple files.</p>
+            
+            <!-- Progress bar container -->
+            <div class="progress-container">
+                <div id="progress_bar" class="progress-bar"></div>
+            </div>
+        </div>
+    </main>
+    <footer>
+        &copy; 2025 FileUploader Inc. All rights reserved.
+    </footer>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    <script>
+        const CLIENT_ID = '958416089916-1embl17stmkectofeqb74c54ccs38rb5.apps.googleusercontent.com';
+        const API_KEY = 'YOUR_API_KEY';
+        const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
-    <!-- File List from Google Drive -->
-    <div class="file-list" id="fileList">
-        <h3>Files on Google Drive:</h3>
-    </div>
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+        let selectedFiles = [];
 
-    <!-- Search Box -->
-    <input type="text" id="searchInput" placeholder="Enter customer number">
-    <button id="searchButton">Search</button>
+        function gapiLoaded() {
+            gapi.load('client', initializeGapiClient);
+        }
 
-    <!-- Result Display -->
-    <div id="resultContainer"></div>
-</div>
-
-<script>
-    const CLIENT_ID = '361306676979-daeqed946lct73e84fu6t16i38u2ialv.apps.googleusercontent.com'; // Replace with your Client ID
-    const API_KEY = 'YOUR_GOOGLE_API_KEY'; // Replace with your API Key
-    const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
-    let fileData = {};
-
-    // Load the Google API client
-    function handleClientLoad() {
-        gapi.load('client:auth2', initClient);
-    }
-
-    function initClient() {
-        gapi.client.init({
-            apiKey: API_KEY,
-            clientId: CLIENT_ID,
-            scope: SCOPES
-        }).then(() => {
-            const authorizeButton = document.getElementById('authorizeButton');
-            authorizeButton.onclick = handleAuthClick;
-        });
-    }
-
-    function handleAuthClick() {
-        gapi.auth2.getAuthInstance().signIn().then(listFiles);
-    }
-
-    function listFiles() {
-        gapi.client.drive.files.list({
-            pageSize: 10,
-            fields: 'files(id, name, mimeType)'
-        }).then(response => {
-            const files = response.result.files;
-            const fileList = document.getElementById('fileList');
-            fileList.innerHTML = '<h3>Files on Google Drive:</h3>';
-
-            files.forEach(file => {
-                const fileItem = document.createElement('div');
-                fileItem.classList.add('file-item');
-                fileItem.textContent = file.name;
-                fileItem.dataset.fileId = file.id;
-                fileItem.onclick = () => fetchFile(file.id, file.name);
-                fileList.appendChild(fileItem);
+        async function initializeGapiClient() {
+            await gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: DISCOVERY_DOCS,
             });
-        });
-    }
+            gapiInited = true;
+            maybeEnableButtons();
+        }
 
-    function fetchFile(fileId, fileName) {
-        gapi.client.drive.files.get({
-            fileId: fileId,
-            alt: 'media'
-        }).then(response => {
-            const workbook = XLSX.read(response.body, { type: 'binary' });
-            let allData = [];
-
-            workbook.SheetNames.forEach(sheetName => {
-                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
-                allData = allData.concat(rows);
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '',
             });
+            gisInited = true;
+            maybeEnableButtons();
+        }
 
-            fileData[fileName] = allData;
-            alert(`${fileName} loaded successfully!`);
-        });
-    }
-
-    document.getElementById('searchButton').addEventListener('click', () => {
-        const customerNumber = document.getElementById('searchInput').value.trim();
-        const resultContainer = document.getElementById('resultContainer');
-        resultContainer.innerHTML = '';
-
-        let found = false;
-        for (const fileName in fileData) {
-            const data = fileData[fileName];
-            for (const row of data) {
-                if (row.some(cell => String(cell).trim() === customerNumber)) {
-                    resultContainer.innerHTML += `<div class="result">Found in ${fileName}: ${row.join(', ')}</div>`;
-                    found = true;
-                    break;
-                }
+        function maybeEnableButtons() {
+            if (gapiInited && gisInited) {
+                document.getElementById('authorize_button').style.display = 'block';
             }
         }
 
-        if (!found) {
-            resultContainer.innerHTML = '<div class="no-result">Customer not found.</div>';
-        }
-    });
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error) {
+                    throw (resp);
+                }
+                document.getElementById('authorize_button').style.display = 'none';
+                document.getElementById('signout_button').style.display = 'block';
+                document.getElementById('uploadSection').style.display = 'block';
+            };
 
-    handleClientLoad(); // Initialize Google API
-</script>
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            } else {
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        }
+
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token);
+                gapi.client.setToken('');
+                document.getElementById('authorize_button').style.display = 'block';
+                document.getElementById('signout_button').style.display = 'none';
+                document.getElementById('uploadSection').style.display = 'none';
+            }
+        }
+
+        function handleFileSelection() {
+            const fileInput = document.getElementById('file_input');
+            selectedFiles = Array.from(fileInput.files);
+            const fileList = document.getElementById('file_list');
+            fileList.innerHTML = '';
+            selectedFiles.forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = file.name;
+                fileList.appendChild(li);
+            });
+        }
+
+        async function uploadFiles() {
+    if (!selectedFiles.length) {
+        alert('Please select at least one file to upload.');
+        return;
+    }
+
+    const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
+
+    let uploadedFilesCount = 0;
+
+    for (let file of selectedFiles) {
+        const metadata = {
+            'name': file.name,
+            'mimeType': file.type || 'application/octet-stream',
+            'parents': [folderId],
+        };
+        const accessToken = gapi.auth.getToken().access_token;
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', true);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+
+        // Track upload progress
+        xhr.upload.onprogress = function (event) {
+            if (event.lengthComputable) {
+                const percent = (event.loaded / event.total) * 100;
+                document.getElementById('progress_bar').style.width = percent + '%';
+            }
+        };
+
+        xhr.onload = function () {
+            if (xhr.status === 200) {
+                uploadedFilesCount++;
+                console.log(`File "${file.name}" uploaded successfully.`);
+                // Check if all files have been uploaded
+                if (uploadedFilesCount === selectedFiles.length) {
+                    document.getElementById('progress_bar').style.width = '100%';
+                    alert('All files uploaded successfully.');
+                    selectedFiles = [];
+                    document.getElementById('file_list').innerHTML = '';
+                    document.getElementById('progress_bar').style.width = '0'; // Reset progress bar
+                }
+            } else {
+                console.error(`Error uploading file "${file.name}".`);
+            }
+        };
+
+        xhr.onerror = function () {
+            console.error(`Error uploading file "${file.name}".`);
+        };
+
+        xhr.send(form);
+    }
+}
+
+    </script>
 </body>
 </html>
