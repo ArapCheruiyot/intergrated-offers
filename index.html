@@ -280,9 +280,9 @@
             progressBar.style.width = `${percentage}%`;
         }
 
-        document.getElementById('searchButton').addEventListener('click', searchCustomer);
+       document.getElementById('searchButton').addEventListener('click', searchCustomer);
 
-function searchCustomer() {
+async function searchCustomer() {
     const customerNumber = document.getElementById('searchInput').value.trim();
     if (!customerNumber) {
         alert('Please enter a customer number.');
@@ -290,37 +290,42 @@ function searchCustomer() {
     }
 
     let found = false;  // Flag to check if customer number is found
-    selectedFiles.forEach(file => {
+
+    // Use Promise.all to handle asynchronous file reading
+    await Promise.all(selectedFiles.map(async (file) => {
         const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Wrap the FileReader inside a promise
+        const fileContent = new Promise((resolve, reject) => {
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
 
-            workbook.SheetNames.forEach(sheetName => {
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                workbook.SheetNames.forEach(sheetName => {
+                    const sheet = workbook.Sheets[sheetName];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-                rows.forEach(row => {
-                    if (row.includes(customerNumber)) {
-                        alert(`Customer number ${customerNumber} found in ${file.name}, Sheet: ${sheetName}`);
-                        found = true;  // Set flag to true when customer number is found
-                    }
+                    rows.forEach(row => {
+                        if (row.includes(customerNumber)) {
+                            alert(`Customer number ${customerNumber} found in ${file.name}, Sheet: ${sheetName}`);
+                            found = true;
+                        }
+                    });
                 });
-            });
-        };
-        reader.onloadend = function() {
-            if (found) {
-                return; // If found, stop further processing
-            }
-        };
+                resolve();  // Resolve the promise once file processing is complete
+            };
+            reader.onerror = reject;  // Reject the promise if an error occurs
+        });
+
+        // Read the file asynchronously
         reader.readAsArrayBuffer(file);
-    });
+        await fileContent;  // Wait for file content processing to finish before continuing
+    }));
 
     if (!found) {
         alert(`Customer number ${customerNumber} not found in any uploaded file.`);
     }
 }
 
-    </script>
 </body>
 </html>
