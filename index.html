@@ -246,86 +246,71 @@
                     'mimeType': file.type || 'application/octet-stream',
                     'parents': [folderId],
                 };
+                const accessToken = gapi.auth.getToken().access_token;
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                form.append('file', file);
 
-                const formData = new FormData();
-                formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                formData.append('file', file);
-
-                const request = new Request(
-                    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-                    {
-                        method: 'POST',
-                        headers: new Headers({
-                            'Authorization': 'Bearer ' + gapi.client.getToken().access_token
-                        }),
-                        body: formData
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
+                xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        document.getElementById('progress_bar').style.width = percent + '%';
                     }
-                );
+                };
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        uploadedFilesCount++;
+                    }
+                    if (uploadedFilesCount === selectedFiles.length) {
+                        alert('All files uploaded successfully!');
+                    }
+                };
+                xhr.send(form);
+            }
+        }
 
-                const response = await fetch(request);
-                if (response.ok) {
-                    uploadedFilesCount++;
-                    updateProgressBar(uploadedFilesCount, selectedFiles.length);
-                } else {
-                    console.error('File upload failed', response);
-                }
+        // Search function to find customer number inside files
+        document.getElementById("searchButton").addEventListener("click", async () => {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            if (!searchTerm) {
+                alert("Please enter a customer number.");
+                return;
             }
 
-            alert('Files uploaded successfully');
-        }
+            let found = false;
+            for (let file of selectedFiles) {
+                const fileReader = new FileReader();
+                fileReader.onload = async function(event) {
+                    const data = event.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
 
-        function updateProgressBar(uploadedCount, totalFiles) {
-            const progressBar = document.getElementById('progress_bar');
-            const percentage = (uploadedCount / totalFiles) * 100;
-            progressBar.style.width = `${percentage}%`;
-        }
-
-       document.getElementById('searchButton').addEventListener('click', searchCustomer);
-
-async function searchCustomer() {
-    const customerNumber = document.getElementById('searchInput').value.trim();
-    if (!customerNumber) {
-        alert('Please enter a customer number.');
-        return;
-    }
-
-    let found = false;  // Flag to check if customer number is found
-
-    // Use Promise.all to handle asynchronous file reading
-    await Promise.all(selectedFiles.map(async (file) => {
-        const reader = new FileReader();
-        
-        // Wrap the FileReader inside a promise
-        const fileContent = new Promise((resolve, reject) => {
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-
-                workbook.SheetNames.forEach(sheetName => {
-                    const sheet = workbook.Sheets[sheetName];
-                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-                    rows.forEach(row => {
-                        if (row.includes(customerNumber)) {
-                            alert(`Customer number ${customerNumber} found in ${file.name}, Sheet: ${sheetName}`);
-                            found = true;
+                    // Loop through sheets in the workbook
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet);
+                        
+                        // Loop through rows to find the customer number
+                        for (let row of jsonData) {
+                            for (let key in row) {
+                                if (row[key] && row[key].toString().includes(searchTerm)) {
+                                    found = true;
+                                    alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                    return;
+                                }
+                            }
                         }
-                    });
-                });
-                resolve();  // Resolve the promise once file processing is complete
-            };
-            reader.onerror = reject;  // Reject the promise if an error occurs
+                    }
+                };
+                fileReader.readAsBinaryString(file);
+            }
+
+            if (!found) {
+                alert(`Customer number ${searchTerm} not found in any file.`);
+            }
         });
-
-        // Read the file asynchronously
-        reader.readAsArrayBuffer(file);
-        await fileContent;  // Wait for file content processing to finish before continuing
-    }));
-
-    if (!found) {
-        alert(`Customer number ${customerNumber} not found in any uploaded file.`);
-    }
-}
-
+    </script>
 </body>
 </html>
