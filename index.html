@@ -149,6 +149,7 @@
     </footer>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
     <script>
         const CLIENT_ID = '958416089916-1embl17stmkectofeqb74c54ccs38rb5.apps.googleusercontent.com';
         const API_KEY = 'YOUR_API_KEY';
@@ -251,53 +252,65 @@
                 form.append('file', file);
 
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', true);
+                xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
                 xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable) {
-                        const percent = (event.loaded / event.total) * 100;
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
                         document.getElementById('progress_bar').style.width = percent + '%';
                     }
                 };
-
                 xhr.onload = () => {
                     if (xhr.status === 200) {
                         uploadedFilesCount++;
-                        if (uploadedFilesCount === selectedFiles.length) {
-                            alert('All files uploaded successfully!');
-                            document.getElementById('progress_bar').style.width = '0%';
-                        }
+                    }
+                    if (uploadedFilesCount === selectedFiles.length) {
+                        alert('All files uploaded successfully!');
                     }
                 };
-
                 xhr.send(form);
             }
         }
 
-         document.getElementById('searchButton').addEventListener('click', function () {
-    const searchValue = document.getElementById('searchInput').value.trim().toLowerCase();
-    console.log("Search value: ", searchValue); // Debugging line
+        // Search function to find customer number inside files
+        document.getElementById("searchButton").addEventListener("click", async () => {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            if (!searchTerm) {
+                alert("Please enter a customer number.");
+                return;
+            }
 
-    if (!searchValue) {
-        alert('Please enter a customer number.');
-        return;
-    }
+            let found = false;
+            for (let file of selectedFiles) {
+                const fileReader = new FileReader();
+                fileReader.onload = async function(event) {
+                    const data = event.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
 
-    let found = false;
+                    // Loop through sheets in the workbook
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet);
+                        
+                        // Loop through rows to find the customer number
+                        for (let row of jsonData) {
+                            for (let key in row) {
+                                if (row[key] && row[key].toString().includes(searchTerm)) {
+                                    found = true;
+                                    alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                };
+                fileReader.readAsBinaryString(file);
+            }
 
-    selectedFiles.forEach(file => {
-        const cleanFileName = file.name.toLowerCase().trim();
-        console.log("Comparing:", cleanFileName, "with", searchValue); // Debugging
-        if (cleanFileName.includes(searchValue)) {
-            found = true;
-            alert('File found: ' + file.name);
-        }
-    });
-
-    if (!found) {
-        alert('No file found for the entered customer number.');
-    }
-});
+            if (!found) {
+                alert(`Customer number ${searchTerm} not found in any file.`);
+            }
+        });
     </script>
 </body>
 </html>
