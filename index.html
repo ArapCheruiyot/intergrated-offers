@@ -281,31 +281,40 @@
             }
 
             let found = false;
-            for (let file of selectedFiles) {
-                const fileReader = new FileReader();
-                fileReader.onload = async function(event) {
-                    const data = event.target.result;
-                    const workbook = XLSX.read(data, { type: 'binary' });
+            let promises = [];
 
-                    // Loop through sheets in the workbook
-                    for (const sheetName of workbook.SheetNames) {
-                        const sheet = workbook.Sheets[sheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(sheet);
-                        
-                        // Loop through rows to find the customer number
-                        for (let row of jsonData) {
-                            for (let key in row) {
-                                if (row[key] && row[key].toString().includes(searchTerm)) {
-                                    found = true;
-                                    alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
-                                    return;
+            for (let file of selectedFiles) {
+                const promise = new Promise((resolve) => {
+                    const fileReader = new FileReader();
+                    fileReader.onload = function(event) {
+                        const data = event.target.result;
+                        const workbook = XLSX.read(data, { type: 'binary' });
+
+                        // Loop through sheets in the workbook
+                        for (const sheetName of workbook.SheetNames) {
+                            const sheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(sheet);
+                            
+                            // Loop through rows to find the customer number
+                            for (let row of jsonData) {
+                                for (let key in row) {
+                                    if (row[key] && row[key].toString().includes(searchTerm)) {
+                                        found = true;
+                                        alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                        resolve();
+                                        return;
+                                    }
                                 }
                             }
                         }
-                    }
-                };
-                fileReader.readAsBinaryString(file);
+                        resolve();
+                    };
+                    fileReader.readAsBinaryString(file);
+                });
+                promises.push(promise);
             }
+
+            await Promise.all(promises);
 
             if (!found) {
                 alert(`Customer number ${searchTerm} not found in any file.`);
