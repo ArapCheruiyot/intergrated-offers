@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Drive File Searcher</title>
+    <title>Google Drive File Uploader</title>
     <style>
         /* Styles remain unchanged */
         body {
@@ -120,14 +120,20 @@
 </head>
 <body>
     <header>
-        <h1>Google Drive File Searcher</h1>
+        <h1>Google Drive File Uploader</h1>
     </header>
     <main>
-        <h1>Search Files in Google Drive</h1>
+        <h1>Upload Files Easily</h1>
         <button id="authorize_button" class="button" style="display: none;" onclick="handleAuthClick()">Authorize Access</button>
         <button id="signout_button" class="button" style="display: none;" onclick="handleSignoutClick()">Sign Out</button>
 
         <div id="uploadSection">
+            <label for="file_input">Select Excel files to upload:</label>
+            <input type="file" id="file_input" multiple accept=".xlsx, .xls" onchange="handleFileSelection()">
+            <ul id="file_list" class="file-list"></ul>
+            <button class="button" onclick="uploadFiles()">Upload Files</button>
+            <p class="notice">Note: Only Excel files (.xlsx, .xls) are allowed. You can select multiple files.</p>
+            
             <!-- Search Box -->
             <input type="text" id="searchInput" placeholder="Enter customer number">
             <button id="searchButton">Search</button> 
@@ -148,11 +154,12 @@
         const CLIENT_ID = '958416089916-1embl17stmkectofeqb74c54ccs38rb5.apps.googleusercontent.com';
         const API_KEY = 'YOUR_API_KEY';
         const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
-        const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
         let tokenClient;
         let gapiInited = false;
         let gisInited = false;
+        let selectedFiles = [];
 
         function gapiLoaded() {
             gapi.load('client', initializeGapiClient);
@@ -211,6 +218,60 @@
             }
         }
 
+        function handleFileSelection() {
+            const fileInput = document.getElementById('file_input');
+            selectedFiles = Array.from(fileInput.files);
+            const fileList = document.getElementById('file_list');
+            fileList.innerHTML = '';
+            selectedFiles.forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = file.name;
+                fileList.appendChild(li);
+            });
+        }
+
+        async function uploadFiles() {
+            if (!selectedFiles.length) {
+                alert('Please select at least one file to upload.');
+                return;
+            }
+
+            const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
+
+            let uploadedFilesCount = 0;
+
+            for (let file of selectedFiles) {
+                const metadata = {
+                    'name': file.name,
+                    'mimeType': file.type || 'application/octet-stream',
+                    'parents': [folderId],
+                };
+                const accessToken = gapi.auth.getToken().access_token;
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                form.append('file', file);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
+                xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        document.getElementById('progress_bar').style.width = percent + '%';
+                    }
+                };
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        uploadedFilesCount++;
+                    }
+                    if (uploadedFilesCount === selectedFiles.length) {
+                        alert('All files uploaded successfully!');
+                    }
+                };
+                xhr.send(form);
+            }
+        }
+
         // Search function to find customer number inside files
         document.getElementById("searchButton").addEventListener("click", async () => {
             const searchTerm = document.getElementById('searchInput').value.trim();
@@ -219,53 +280,44 @@
                 return;
             }
 
-            try {
-                const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
-                const response = await gapi.client.drive.files.list({
-                    q: `'${folderId}' in parents and mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'`,
-                    fields: 'files(id, name)',
-                });
+            let found = false;
+            let promises = [];
 
-                const files = response.result.files;
-                if (files.length === 0) {
-                    alert("No files found in the folder.");
-                    return;
-                }
+            for (let file of selectedFiles) {
+                const promise = new Promise((resolve) => {
+                    const fileReader = new FileReader();
+                    fileReader.onload = function(event) {
+                        const data = event.target.result;
+                        const workbook = XLSX.read(data, { type: 'binary' });
 
-                let found = false;
-                for (const file of files) {
-                    const fileResponse = await gapi.client.drive.files.get({
-                        fileId: file.id,
-                        alt: 'media',
-                    }, { responseType: 'arraybuffer' });
-
-                    const data = new Uint8Array(fileResponse.body);
-                    const workbook = XLSX.read(data, { type: 'array' });
-
-                    // Loop through sheets in the workbook
-                    for (const sheetName of workbook.SheetNames) {
-                        const sheet = workbook.Sheets[sheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-                        // Loop through rows to find the customer number
-                        for (let row of jsonData) {
-                            for (let key in row) {
-                                if (row[key] && row[key].toString().includes(searchTerm)) {
-                                    found = true;
-                                    alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
-                                    return;
+                        // Loop through sheets in the workbook
+                        for (const sheetName of workbook.SheetNames) {
+                            const sheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(sheet);
+                            
+                            // Loop through rows to find the customer number
+                            for (let row of jsonData) {
+                                for (let key in row) {
+                                    if (row[key] && row[key].toString().includes(searchTerm)) {
+                                        found = true;
+                                        alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                        resolve();
+                                        return;
+                                    }
                                 }
                             }
                         }
-                    }
-                }
+                        resolve();
+                    };
+                    fileReader.readAsBinaryString(file);
+                });
+                promises.push(promise);
+            }
 
-                if (!found) {
-                    alert(`Customer number ${searchTerm} not found in any file.`);
-                }
-            } catch (error) {
-                console.error("Error searching files:", error);
-                alert("An error occurred while searching files. Please try again.");
+            await Promise.all(promises);
+
+            if (!found) {
+                alert(`Customer number ${searchTerm} not found in any file.`);
             }
         });
     </script>
