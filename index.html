@@ -66,23 +66,55 @@
             background: #f9f9f9;
             box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
         }
+        .notice {
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 10px;
+        }
         .file-list {
             margin: 20px 0;
             list-style-type: none;
             padding: 0;
         }
         .file-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin: 5px 0;
             padding: 10px;
             background: #f9f9f9;
             border: 1px solid #ccc;
             border-radius: 4px;
         }
+        .delete-button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .delete-button:hover {
+            background: #c0392b;
+        }
         footer {
             text-align: center;
             margin-top: 20px;
             font-size: 0.9em;
             color: #777;
+        }
+        /* Progress bar styles */
+        .progress-container {
+            width: 100%;
+            background-color: #f3f3f3;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 0;
+            height: 20px;
+            background-color: #4CAF50;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -100,6 +132,16 @@
             <input type="file" id="file_input" multiple accept=".xlsx, .xls" onchange="handleFileSelection()">
             <ul id="file_list" class="file-list"></ul>
             <button class="button" onclick="uploadFiles()">Upload Files</button>
+            <p class="notice">Note: Only Excel files (.xlsx, .xls) are allowed. You can select multiple files.</p>
+            
+            <!-- Search Box -->
+            <input type="text" id="searchInput" placeholder="Enter customer number">
+            <button id="searchButton">Search</button> 
+            
+            <!-- Progress bar container -->
+            <div class="progress-container">
+                <div id="progress_bar" class="progress-bar"></div>
+            </div>
         </div>
     </main>
     <footer>
@@ -107,6 +149,7 @@
     </footer>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
     <script>
         const CLIENT_ID = '958416089916-1embl17stmkectofeqb74c54ccs38rb5.apps.googleusercontent.com';
         const API_KEY = 'YOUR_API_KEY';
@@ -117,7 +160,6 @@
         let gapiInited = false;
         let gisInited = false;
         let selectedFiles = [];
-        let existingFiles = [];
 
         function gapiLoaded() {
             gapi.load('client', initializeGapiClient);
@@ -156,7 +198,6 @@
                 document.getElementById('authorize_button').style.display = 'none';
                 document.getElementById('signout_button').style.display = 'block';
                 document.getElementById('uploadSection').style.display = 'block';
-                await fetchExistingFiles();
             };
 
             if (gapi.client.getToken() === null) {
@@ -189,30 +230,21 @@
             });
         }
 
-        async function fetchExistingFiles() {
-            const response = await gapi.client.drive.files.list({
-                q: "'YOUR_FOLDER_ID' in parents",
-                fields: "files(id, name)",
-            });
-            existingFiles = response.result.files.map(file => file.name);
-        }
-
         async function uploadFiles() {
             if (!selectedFiles.length) {
                 alert('Please select at least one file to upload.');
                 return;
             }
 
-            for (let file of selectedFiles) {
-                if (existingFiles.includes(file.name)) {
-                    alert(`File "${file.name}" already exists in Google Drive.`);
-                    continue;
-                }
+            const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
 
+            let uploadedFilesCount = 0;
+
+            for (let file of selectedFiles) {
                 const metadata = {
                     'name': file.name,
                     'mimeType': file.type || 'application/octet-stream',
-                    'parents': ['YOUR_FOLDER_ID'],
+                    'parents': [folderId],
                 };
                 const accessToken = gapi.auth.getToken().access_token;
                 const form = new FormData();
@@ -222,11 +254,72 @@
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
                 xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        document.getElementById('progress_bar').style.width = percent + '%';
+                    }
+                };
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        uploadedFilesCount++;
+                    }
+                    if (uploadedFilesCount === selectedFiles.length) {
+                        alert('All files uploaded successfully!');
+                    }
+                };
                 xhr.send(form);
             }
-
-            alert('Upload complete!');
         }
+
+        // Search function to find customer number inside files
+        document.getElementById("searchButton").addEventListener("click", async () => {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            if (!searchTerm) {
+                alert("Please enter a customer number.");
+                return;
+            }
+
+            let found = false;
+            let promises = [];
+
+            for (let file of selectedFiles) {
+                const promise = new Promise((resolve) => {
+                    const fileReader = new FileReader();
+                    fileReader.onload = function(event) {
+                        const data = event.target.result;
+                        const workbook = XLSX.read(data, { type: 'binary' });
+
+                        // Loop through sheets in the workbook
+                        for (const sheetName of workbook.SheetNames) {
+                            const sheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(sheet);
+                            
+                            // Loop through rows to find the customer number
+                            for (let row of jsonData) {
+                                for (let key in row) {
+                                    if (row[key] && row[key].toString().includes(searchTerm)) {
+                                        found = true;
+                                        alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                        resolve();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        resolve();
+                    };
+                    fileReader.readAsBinaryString(file);
+                });
+                promises.push(promise);
+            }
+
+            await Promise.all(promises);
+
+            if (!found) {
+                alert(`Customer number ${searchTerm} not found in any file.`);
+            }
+        });
     </script>
 </body>
 </html>
