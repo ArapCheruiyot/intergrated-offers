@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Drive File Uploader and Searcher</title>
+    <title>Google Drive File Uploader</title>
     <style>
         /* Styles remain unchanged */
         body {
@@ -120,10 +120,10 @@
 </head>
 <body>
     <header>
-        <h1>Google Drive File Uploader and Searcher</h1>
+        <h1>Google Drive File Uploader</h1>
     </header>
     <main>
-        <h1>Upload and Search Files</h1>
+        <h1>Upload Files Easily</h1>
         <button id="authorize_button" class="button" style="display: none;" onclick="handleAuthClick()">Authorize Access</button>
         <button id="signout_button" class="button" style="display: none;" onclick="handleSignoutClick()">Sign Out</button>
 
@@ -154,7 +154,7 @@
         const CLIENT_ID = '958416089916-1embl17stmkectofeqb74c54ccs38rb5.apps.googleusercontent.com';
         const API_KEY = 'YOUR_API_KEY';
         const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
         let tokenClient;
         let gapiInited = false;
@@ -280,53 +280,44 @@
                 return;
             }
 
-            try {
-                const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
-                const response = await gapi.client.drive.files.list({
-                    q: `'${folderId}' in parents and mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'`,
-                    fields: 'files(id, name)',
-                });
+            let found = false;
+            let promises = [];
 
-                const files = response.result.files;
-                if (files.length === 0) {
-                    alert("No files found in the folder.");
-                    return;
-                }
+            for (let file of selectedFiles) {
+                const promise = new Promise((resolve) => {
+                    const fileReader = new FileReader();
+                    fileReader.onload = function(event) {
+                        const data = event.target.result;
+                        const workbook = XLSX.read(data, { type: 'binary' });
 
-                let found = false;
-                for (const file of files) {
-                    const fileResponse = await gapi.client.drive.files.get({
-                        fileId: file.id,
-                        alt: 'media',
-                    }, { responseType: 'arraybuffer' });
-
-                    const data = new Uint8Array(fileResponse.body);
-                    const workbook = XLSX.read(data, { type: 'array' });
-
-                    // Loop through sheets in the workbook
-                    for (const sheetName of workbook.SheetNames) {
-                        const sheet = workbook.Sheets[sheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-                        // Loop through rows to find the customer number
-                        for (let row of jsonData) {
-                            for (let key in row) {
-                                if (row[key] && row[key].toString().includes(searchTerm)) {
-                                    found = true;
-                                    alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
-                                    return;
+                        // Loop through sheets in the workbook
+                        for (const sheetName of workbook.SheetNames) {
+                            const sheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(sheet);
+                            
+                            // Loop through rows to find the customer number
+                            for (let row of jsonData) {
+                                for (let key in row) {
+                                    if (row[key] && row[key].toString().includes(searchTerm)) {
+                                        found = true;
+                                        alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                        resolve();
+                                        return;
+                                    }
                                 }
                             }
                         }
-                    }
-                }
+                        resolve();
+                    };
+                    fileReader.readAsBinaryString(file);
+                });
+                promises.push(promise);
+            }
 
-                if (!found) {
-                    alert(`Customer number ${searchTerm} not found in any file.`);
-                }
-            } catch (error) {
-                console.error("Error searching files:", error);
-                alert("An error occurred while searching files. Please try again.");
+            await Promise.all(promises);
+
+            if (!found) {
+                alert(`Customer number ${searchTerm} not found in any file.`);
             }
         });
     </script>
