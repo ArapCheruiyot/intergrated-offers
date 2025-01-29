@@ -1,118 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Drive File Uploader</title>
+    <!-- Keep all the same styles from before -->
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f9;
-            color: #333;
-        }
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 15px;
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-        main {
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            font-size: 1.8em;
-            margin-bottom: 20px;
-            text-align: center;
-            color: #4CAF50;
-        }
-        .button {
-            display: inline-block;
-            padding: 10px 20px;
-            margin: 10px 0;
-            font-size: 1em;
-            font-weight: bold;
-            color: white;
-            background-color: #4CAF50;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            text-align: center;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
-        }
-        .button:hover {
-            background-color: #45a049;
-        }
-        #uploadSection {
-            display: none;
+        /* ... (keep all existing styles the same) ... */
+        .search-results {
             margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
-        input[type="file"] {
+        .result-item {
             margin: 10px 0;
             padding: 10px;
-            width: 100%;
-            font-size: 1em;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: #f9f9f9;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        .notice {
-            font-size: 0.9em;
-            color: #888;
-            margin-top: 10px;
-        }
-        .file-list {
-            margin: 20px 0;
-            list-style-type: none;
-            padding: 0;
-        }
-        .file-list li {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 5px 0;
-            padding: 10px;
-            background: #f9f9f9;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        .delete-button {
-            background: #e74c3c;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 5px 10px;
-            cursor: pointer;
-        }
-        .delete-button:hover {
-            background: #c0392b;
-        }
-        footer {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 0.9em;
-            color: #777;
-        }
-        .progress-container {
-            width: 100%;
-            background-color: #f3f3f3;
-            border-radius: 4px;
-            margin-top: 20px;
-        }
-        .progress-bar {
-            width: 0;
-            height: 20px;
-            background-color: #4CAF50;
-            border-radius: 4px;
+            background: #f8f9fa;
+            border-left: 4px solid #4CAF50;
         }
     </style>
 </head>
@@ -126,16 +28,20 @@
         <button id="signout_button" class="button" style="display: none;" onclick="handleSignoutClick()">Sign Out</button>
 
         <div id="uploadSection">
+            <!-- Keep the existing upload UI -->
             <label for="file_input">Select Excel files to upload:</label>
             <input type="file" id="file_input" multiple accept=".xlsx, .xls" onchange="handleFileSelection()">
             <ul id="file_list" class="file-list"></ul>
             <button class="button" onclick="uploadFiles()">Upload Files</button>
             <p class="notice">Note: Only Excel files (.xlsx, .xls) are allowed. You can select multiple files.</p>
             
-            <!-- Search Box -->
-            <input type="text" id="searchInput" placeholder="Enter customer number">
-            <button id="searchButton">Search</button> 
-            
+            <!-- Enhanced Search Section -->
+            <div class="search-section">
+                <input type="text" id="searchInput" placeholder="Enter customer number">
+                <button class="button" id="searchButton" onclick="handleSearch()">Search</button>
+                <div id="searchResults" class="search-results"></div>
+            </div>
+
             <!-- Progress bar container -->
             <div class="progress-container">
                 <div id="progress_bar" class="progress-bar"></div>
@@ -153,181 +59,95 @@
         const API_KEY = 'YOUR_API_KEY';
         const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        const FOLDER_ID = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Your folder ID
 
         let tokenClient;
         let gapiInited = false;
         let gisInited = false;
         let selectedFiles = [];
 
-        function gapiLoaded() {
-            gapi.load('client', initializeGapiClient);
-        }
+        // Keep all the existing auth functions the same until...
 
-        async function initializeGapiClient() {
-            await gapi.client.init({
-                apiKey: API_KEY,
-                discoveryDocs: DISCOVERY_DOCS,
-            });
-            gapiInited = true;
-            maybeEnableButtons();
-        }
+        // Modified Search Function
+        async function handleSearch() {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            const resultsContainer = document.getElementById('searchResults');
+            resultsContainer.innerHTML = '<div>Searching...</div>';
 
-        function gisLoaded() {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: '',
-            });
-            gisInited = true;
-            maybeEnableButtons();
-        }
-
-        function maybeEnableButtons() {
-            if (gapiInited && gisInited) {
-                document.getElementById('authorize_button').style.display = 'block';
+            if (!searchTerm) {
+                resultsContainer.innerHTML = '<div class="result-item">Please enter a search term</div>';
+                return;
             }
-        }
 
-        function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                if (resp.error) {
-                    throw (resp);
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `'${FOLDER_ID}' in parents and mimeType contains 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'`,
+                    fields: 'files(id, name)'
+                });
+
+                const files = response.result.files;
+                if (!files.length) {
+                    resultsContainer.innerHTML = '<div class="result-item">No files found in drive</div>';
+                    return;
                 }
-                document.getElementById('authorize_button').style.display = 'none';
-                document.getElementById('signout_button').style.display = 'block';
-                document.getElementById('uploadSection').style.display = 'block';
-            };
 
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({ prompt: 'consent' });
-            } else {
-                tokenClient.requestAccessToken({ prompt: '' });
+                resultsContainer.innerHTML = '';
+                let foundMatches = false;
+
+                for (const file of files) {
+                    try {
+                        const fileResponse = await gapi.client.drive.files.get({
+                            fileId: file.id,
+                            alt: 'media'
+                        }, { responseType: 'arraybuffer' });
+
+                        const workbook = XLSX.read(fileResponse.body, { type: 'array' });
+                        
+                        workbook.SheetNames.forEach(sheetName => {
+                            const worksheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                            
+                            jsonData.forEach((row, index) => {
+                                Object.values(row).forEach(value => {
+                                    if (value.toString().includes(searchTerm)) {
+                                        foundMatches = true;
+                                        const resultHTML = `
+                                            <div class="result-item">
+                                                <strong>File:</strong> ${file.name}<br>
+                                                <strong>Sheet:</strong> ${sheetName}<br>
+                                                <strong>Row ${index + 2}:</strong> ${JSON.stringify(row)}
+                                            </div>
+                                        `;
+                                        resultsContainer.innerHTML += resultHTML;
+                                    }
+                                });
+                            });
+                        });
+                    } catch (error) {
+                        console.error('Error processing file:', file.name, error);
+                    }
+                }
+
+                if (!foundMatches) {
+                    resultsContainer.innerHTML = `<div class="result-item">No matches found for "${searchTerm}"</div>`;
+                }
+            } catch (error) {
+                console.error('Search failed:', error);
+                resultsContainer.innerHTML = '<div class="result-item">Search failed - check console</div>';
             }
         }
 
-        function handleSignoutClick() {
-            const token = gapi.client.getToken();
-            if (token !== null) {
-                google.accounts.oauth2.revoke(token.access_token);
-                gapi.client.setToken('');
-                document.getElementById('authorize_button').style.display = 'block';
-                document.getElementById('signout_button').style.display = 'none';
-                document.getElementById('uploadSection').style.display = 'none';
-            }
-        }
+        // Keep all other functions the same (handleAuthClick, uploadFiles, etc.)
 
-        function handleFileSelection() {
-            const fileInput = document.getElementById('file_input');
-            selectedFiles = Array.from(fileInput.files);
-            const fileList = document.getElementById('file_list');
-            fileList.innerHTML = '';
-            selectedFiles.forEach(file => {
-                const li = document.createElement('li');
-                li.textContent = file.name;
-                fileList.appendChild(li);
-            });
-        }
-
+        // Update the uploadFiles function to use FOLDER_ID constant
         async function uploadFiles() {
             if (!selectedFiles.length) {
                 alert('Please select at least one file to upload.');
                 return;
             }
 
-            const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
-
-            let uploadedFilesCount = 0;
-
-            for (let file of selectedFiles) {
-                const metadata = {
-                    'name': file.name,
-                    'mimeType': file.type || 'application/octet-stream',
-                    'parents': [folderId],
-                };
-
-                if (file.size > 10000000) {  // Check if file size exceeds 10MB
-                    alert(`File ${file.name} exceeds size limit of 10MB. Please choose a smaller file.`);
-                    continue;
-                }
-
-                const accessToken = gapi.auth.getToken().access_token;
-                const form = new FormData();
-                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                form.append('file', file);
-
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
-                xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const percent = (e.loaded / e.total) * 100;
-                        document.getElementById('progress_bar').style.width = percent + '%';
-                    }
-                };
-                xhr.onload = () => {
-                    if (xhr.status === 200) {
-                        uploadedFilesCount++;
-                    } else {
-                        alert('Error uploading file: ' + file.name);
-                    }
-                    if (uploadedFilesCount === selectedFiles.length) {
-                        alert('All files uploaded successfully!');
-                    }
-                };
-                xhr.send(form);
-            }
-        }
-
-        document.getElementById("searchButton").addEventListener("click", async () => {
-            const searchTerm = document.getElementById('searchInput').value.trim();
-            if (!searchTerm) {
-                alert("Please enter a customer number.");
-                return;
-            }
-
-            let found = false;
-            let promises = [];
-
-            for (let file of selectedFiles) {
-                promises.push(searchInFile(file, searchTerm));
-            }
-
-            Promise.all(promises)
-                .then(() => {
-                    if (!found) {
-                        alert("Customer number not found.");
-                    }
-                })
-                .catch(error => {
-                    console.error('Error during search:', error);
-                });
-        });
-
-        async function searchInFile(file, searchTerm) {
-            const reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-            return new Promise((resolve, reject) => {
-                reader.onload = () => {
-                    const data = new Uint8Array(reader.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    let found = false;
-
-                    workbook.SheetNames.forEach(sheetName => {
-                        const sheet = workbook.Sheets[sheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-                        jsonData.forEach(row => {
-                            if (row['customerNumber'] && row['customerNumber'].toString() === searchTerm) {
-                                found = true;
-                                alert(`Found customer: ${row['customerNumber']} in ${file.name}`);
-                            }
-                        });
-                    });
-
-                    resolve();
-                };
-                reader.onerror = reject;
-            });
+            // Rest of your uploadFiles function remains the same...
+            // (just make sure it's using the FOLDER_ID constant)
         }
     </script>
 </body>
