@@ -151,7 +151,7 @@
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
     <script>
-        const CLIENT_ID = '958416089916-1embl17stmkectofeqb74c54ccs38rb5.apps.googleusercontent.com';
+        const CLIENT_ID = '743264679221-omplmhe5mj6vo37dbtk2dgj5vcfv6p4k.apps.googleusercontent.com';
         const API_KEY = 'YOUR_API_KEY';
         const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -274,58 +274,88 @@
 
         // Function to fetch files from Google Drive
         async function fetchFilesFromDrive(folderId) {
-            const response = await gapi.client.drive.files.list({
-                q: `'${folderId}' in parents`,
-                fields: 'files(id, name)',
-            });
-            return response.result.files;
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `'${folderId}' in parents`,
+                    fields: 'files(id, name)',
+                });
+                return response.result.files;
+            } catch (error) {
+                console.error("Error fetching files from Google Drive:", error);
+                throw error;
+            }
         }
 
         // Function to download file content from Google Drive
         async function downloadFileContent(fileId) {
-            const response = await gapi.client.drive.files.get({
-                fileId: fileId,
-                alt: 'media',
-            }, { responseType: 'arraybuffer' });
-            return response.body;
+            try {
+                const response = await gapi.client.drive.files.get({
+                    fileId: fileId,
+                    alt: 'media',
+                }, { responseType: 'arraybuffer' });
+                return response.body;
+            } catch (error) {
+                console.error("Error downloading file content:", error);
+                throw error;
+            }
         }
 
         // Search function to find customer number inside files
         document.getElementById("searchButton").addEventListener("click", async () => {
+            if (!gapi.client.getToken()) {
+                alert("Please authorize access to Google Drive first.");
+                return;
+            }
+
             const searchTerm = document.getElementById('searchInput').value.trim();
             if (!searchTerm) {
                 alert("Please enter a customer number.");
                 return;
             }
 
+            console.log("Searching for:", searchTerm); // Debugging
+
             const folderId = '1rSxY5C7YCGFS1mpwlAckQQuBTAn8OQH-'; // Replace with your folder ID
-            const files = await fetchFilesFromDrive(folderId);
-            let found = false;
+            console.log("Fetching files from folder:", folderId); // Debugging
 
-            for (let file of files) {
-                const fileContent = await downloadFileContent(file.id);
-                const workbook = XLSX.read(new Uint8Array(fileContent), { type: 'array' });
+            try {
+                const files = await fetchFilesFromDrive(folderId);
+                console.log("Files fetched:", files); // Debugging
 
-                // Loop through sheets in the workbook
-                for (const sheetName of workbook.SheetNames) {
-                    const sheet = workbook.Sheets[sheetName];
-                    const jsonData = XLSX.utils.sheet_to_json(sheet);
-                    
-                    // Loop through rows to find the customer number
-                    for (let row of jsonData) {
-                        for (let key in row) {
-                            if (row[key] && row[key].toString().includes(searchTerm)) {
-                                found = true;
-                                alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
-                                return;
+                let found = false;
+
+                for (let file of files) {
+                    console.log("Downloading file:", file.name); // Debugging
+                    const fileContent = await downloadFileContent(file.id);
+                    console.log("File content downloaded:", file.name); // Debugging
+
+                    const workbook = XLSX.read(new Uint8Array(fileContent), { type: 'array' });
+
+                    // Loop through sheets in the workbook
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet);
+                        console.log("Searching in sheet:", sheetName); // Debugging
+
+                        // Loop through rows to find the customer number
+                        for (let row of jsonData) {
+                            for (let key in row) {
+                                if (row[key] && row[key].toString().includes(searchTerm)) {
+                                    found = true;
+                                    alert(`Found ${searchTerm} in file: ${file.name}, Sheet: ${sheetName}`);
+                                    return;
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            if (!found) {
-                alert(`Customer number ${searchTerm} not found in any file.`);
+                if (!found) {
+                    alert(`Customer number ${searchTerm} not found in any file.`);
+                }
+            } catch (error) {
+                console.error("Error during search:", error); // Debugging
+                alert("An error occurred while searching. Check the console for details.");
             }
         });
     </script>
